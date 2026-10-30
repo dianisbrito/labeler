@@ -83,7 +83,12 @@ def main():
 
     names = [it["name"] for it in items]
     done = {n: len(labels.get(n, {})) for n in names}
-    name = st.sidebar.selectbox("Foto", names, format_func=lambda n: f"{n}  ({done[n]} etiquetados)")
+    # key fijo y opciones con texto constante: si el texto cambiara (p. ej. con el contador), Streamlit
+    # lo trataría como otro widget y volvería a la primera foto.
+    name = st.sidebar.selectbox("Foto", names, key="photo")
+    st.sidebar.caption(f"Etiquetados en esta foto: {done[name]}")
+    with st.sidebar.expander("Etiquetas por foto"):
+        st.dataframe({"foto": names, "etiquetados": [done[n] for n in names]}, hide_index=True)
     stem = next(it["stem"] for it in items if it["name"] == name)
     img, seg = pack["images"][stem], pack["segs"][stem]
     bnd, cent = _bnd_and_cent(pack_key, stem, seg.tobytes(), seg.shape)
