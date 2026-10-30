@@ -75,15 +75,29 @@ def main():
     img, seg = pack["images"][stem], pack["segs"][stem]
     bnd, cent = _bnd_and_cent(pack_key, stem, seg.tobytes(), seg.shape)
 
-    cur = st.sidebar.radio("Clase a asignar", classes, key="cur_class",
-                           format_func=lambda c: f"{c}")
+    st.sidebar.markdown("**Clases** · casilla = ver/ocultar · botón = clase activa")
+    st.session_state.setdefault("cur_class", classes[0])
     for i, c in enumerate(classes):
+        st.session_state.setdefault(f"vis_{c}", True)
         r, g, b = core.class_color(i)
-        st.sidebar.markdown(f"<span style='background:rgb({r},{g},{b});padding:0 10px;margin-right:6px'>&nbsp;</span>{c}",
-                            unsafe_allow_html=True)
-    show_bnd = st.sidebar.checkbox("Mostrar contornos", True)
-    alpha = st.sidebar.slider("Opacidad de colores", 0.0, 1.0, 0.45, 0.05)
-    only = st.sidebar.selectbox("Mostrar solo clase", ["(todas)"] + classes)
+        c1, c2, c3 = st.sidebar.columns([1, 6, 3])
+        c1.markdown(f"<div style='background:rgb({r},{g},{b});width:18px;height:18px;margin-top:8px;border:1px solid #fff'></div>",
+                    unsafe_allow_html=True)
+        c2.checkbox(c, key=f"vis_{c}")
+        if c3.button("activa" if st.session_state.cur_class == c else "usar", key=f"use_{c}",
+                     type="primary" if st.session_state.cur_class == c else "secondary"):
+            st.session_state.cur_class = c
+            st.rerun()
+    cur = st.session_state.cur_class
+    def set_visible(mode):
+        for c in classes:
+            st.session_state[f"vis_{c}"] = (mode == "all") or (mode == "active" and c == st.session_state.cur_class)
+
+    q = st.sidebar.columns(3)
+    q[0].button("Todas", on_click=set_visible, args=("all",), help="Mostrar todas las clases")
+    q[1].button("Nada", on_click=set_visible, args=("none",), help="Ocultar todas las clases")
+    q[2].button("Activa", on_click=set_visible, args=("active",), help="Mostrar solo la clase activa")
+    visible = {c for c in classes if st.session_state.get(f"vis_{c}", True)}
     width = st.sidebar.slider("Ancho de la imagen (px)", 500, 1600, 1000, 50)
     eraser = st.sidebar.checkbox("Modo borrar (clic/rectángulo quita la etiqueta)", False)
 
@@ -100,11 +114,17 @@ def main():
         hist.append({k: v for k, v in labels.get(name, {}).items()})
         labels[name] = {}
 
-    st.title(name)
+    st.subheader(name)
     st.caption("Clic = un segmento · arrastrar = todos los segmentos cuyo centro cae en el rectángulo. "
                f"Clase activa: **{cur}**" + ("  (BORRAR)" if eraser else ""))
     labels.setdefault(name, {})
-    view = core.render(img, seg, bnd, labels[name], classes, show_bnd, alpha, None if only == "(todas)" else only)
+    t1, t2, t3 = st.columns([1, 1, 3])
+    show_bnd = t1.toggle("Contornos", True, key="show_bnd")
+    show_col = t2.toggle("Colores", True, key="show_col")
+    alpha = t3.slider("Opacidad", 0.05, 1.0, 0.45, 0.05, key="alpha", label_visibility="collapsed")
+    if cur not in visible and show_col:
+        st.warning(f"La clase activa ({cur}) está oculta: lo que asignes no se verá hasta que la muestres.")
+    view = core.render(img, seg, bnd, labels[name], classes, show_bnd, alpha, visible if show_col else set())
     h = int(view.shape[0] * width / view.shape[1])
     val = streamlit_image_coordinates(Image.fromarray(view), width=width, key=f"img_{pack_key}_{stem}",
                                       click_and_drag=True, image_format="JPEG", jpeg_quality=85, cursor="crosshair")
@@ -126,7 +146,7 @@ def main():
     total = sum(len(v) for v in labels.values())
     st.sidebar.markdown(f"**Total etiquetados:** {total}")
     counts = {c: sum(1 for v in labels.values() for x in v.values() if x == c) for c in classes}
-    st.sidebar.dataframe(counts, use_container_width=True)
+    st.sidebar.dataframe(counts)
     stamp = time.strftime("%Y%m%d_%H%M")
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", who or "anonimo")
     st.sidebar.download_button("Descargar etiquetas (JSON)", core.labels_to_json(labels),

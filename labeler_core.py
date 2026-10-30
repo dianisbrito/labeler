@@ -54,14 +54,15 @@ def centroids(seg: np.ndarray) -> np.ndarray:
 
 
 def render(img: np.ndarray, seg: np.ndarray, bnd: np.ndarray, labels: dict, classes: list[str],
-           show_bnd: bool = True, alpha: float = 0.45, only_class: str | None = None) -> np.ndarray:
+           show_bnd: bool = True, alpha: float = 0.45, visible: set | None = None) -> np.ndarray:
+    """visible: conjunto de clases a pintar (None = todas; conjunto vacío = ninguna, solo foto + contornos)."""
     out = img.astype(np.float32)
     if labels:
         lut = np.zeros((int(seg.max()) + 1, 3), np.float32)
         has = np.zeros(int(seg.max()) + 1, bool)
         for sid, cls in labels.items():
             sid = int(sid)
-            if cls in classes and sid < len(has) and (only_class is None or cls == only_class):
+            if cls in classes and sid < len(has) and (visible is None or cls in visible):
                 lut[sid] = class_color(classes.index(cls))
                 has[sid] = True
         m = has[seg]
