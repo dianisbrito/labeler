@@ -2,7 +2,7 @@
 
 Ejecutar:   streamlit run app/labeler_app.py
 Opcional:   definir BIOCRUST_PACK=ruta\\labeling_pack.zip para que abra ese paquete solo.
-Requiere:   pip install streamlit streamlit-image-coordinates numpy pillow
+Requiere:   pip install streamlit numpy pillow pyarrow<20
 Uso:        elegir clase en la barra lateral -> clic en un segmento, o ARRASTRAR un rectángulo para asignar la clase
             a todos los segmentos cuyo centro cae dentro. Al terminar: "Descargar etiquetas" y enviar el JSON.
 """
@@ -15,11 +15,24 @@ from pathlib import Path
 
 import streamlit as st
 from PIL import Image
-from streamlit_image_coordinates import streamlit_image_coordinates
+import base64
+import io
+
+import streamlit.components.v1 as components
 
 import labeler_core as core
 
 st.set_page_config(page_title="Etiquetador biocrust", layout="wide")
+
+_img_click = components.declare_component("biocrust_img_click", path=str(Path(__file__).parent / "img_click"))
+
+
+def clickable_image(arr, width, key, view_height=800):
+    """Imagen clicable: clic / arrastre (izq.) y clic derecho o doble clic (borrar). Ver img_click/main.js."""
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="JPEG", quality=85)
+    src = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    return _img_click(src=src, width=width, view_height=view_height, cursor="crosshair", key=key, default=None)
 
 
 @st.cache_data(show_spinner="Abriendo paquete...")
@@ -70,7 +83,12 @@ def main():
 
     names = [it["name"] for it in items]
     done = {n: len(labels.get(n, {})) for n in names}
-    name = st.sidebar.selectbox("Foto", names, format_func=lambda n: f"{n}  ({done[n]} etiquetados)")
+    # key fijo y opciones con texto constante: si el texto cambiara (p. ej. con el contador), Streamlit
+    # lo trataría como otro widget y volvería a la primera foto.
+    name = st.sidebar.selectbox("Foto", names, key="photo")
+    st.sidebar.caption(f"Etiquetados en esta foto: {done[name]}")
+    with st.sidebar.expander("Etiquetas por foto"):
+        st.dataframe({"foto": names, "etiquetados": [done[n] for n in names]}, hide_index=True)
     stem = next(it["stem"] for it in items if it["name"] == name)
     img, seg = pack["images"][stem], pack["segs"][stem]
     bnd, cent = _bnd_and_cent(pack_key, stem, seg.tobytes(), seg.shape)
@@ -98,7 +116,8 @@ def main():
     q[1].button("Nada", on_click=set_visible, args=("none",), help="Ocultar todas las clases")
     q[2].button("Activa", on_click=set_visible, args=("active",), help="Mostrar solo la clase activa")
     visible = {c for c in classes if st.session_state.get(f"vis_{c}", True)}
-    width = st.sidebar.slider("Ancho de la imagen (px)", 500, 1600, 1000, 50)
+    width = st.sidebar.slider("Ancho de la imagen al 100% (px)", 500, 1600, 1000, 50)
+    view_h = st.sidebar.slider("Alto del visor (px)", 400, 1400, 800, 50)
     eraser = st.sidebar.checkbox("Modo borrar (clic/rectángulo quita la etiqueta)", False)
 
     cols = st.sidebar.columns(2)
@@ -115,7 +134,7 @@ def main():
         labels[name] = {}
 
     st.subheader(name)
-    st.caption("Clic = un segmento · arrastrar = todos los segmentos cuyo centro cae en el rectángulo. "
+    st.caption("Clic = asigna · arrastrar = rectángulo · **clic derecho o doble clic = borrar** (también con arrastre) · **Ctrl + rueda = zoom** · botón central = mover. "
                f"Clase activa: **{cur}**" + ("  (BORRAR)" if eraser else ""))
     labels.setdefault(name, {})
     t1, t2, t3 = st.columns([1, 1, 3])
@@ -126,17 +145,17 @@ def main():
         st.warning(f"La clase activa ({cur}) está oculta: lo que asignes no se verá hasta que la muestres.")
     view = core.render(img, seg, bnd, labels[name], classes, show_bnd, alpha, visible if show_col else set())
     h = int(view.shape[0] * width / view.shape[1])
-    val = streamlit_image_coordinates(Image.fromarray(view), width=width, key=f"img_{pack_key}_{stem}",
-                                      click_and_drag=True, image_format="JPEG", jpeg_quality=85, cursor="crosshair")
+    val = clickable_image(view, width, key=f"img_{pack_key}_{stem}", view_height=view_h)
     if val and val.get("unix_time") != st.session_state.last_t:
         st.session_state.last_t = val.get("unix_time")
         ids = core.apply_click(val, seg, cent)
+        erase_now = eraser or val.get("button") == 2 or val.get("double")
         if ids:
             step = {}
             for sid in ids:
                 k = str(sid)
                 step[k] = labels[name].get(k)
-                if eraser:
+                if erase_now:
                     labels[name].pop(k, None)
                 else:
                     labels[name][k] = cur
