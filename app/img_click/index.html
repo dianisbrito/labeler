@@ -8,6 +8,14 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div id="image-container"><img id="image" draggable="false" /></div>
+    <div id="viewer">
+      <div id="tools">
+        <button id="zin" title="Acercar (Ctrl + rueda)">+</button>
+        <button id="zout" title="Alejar (Ctrl + rueda)">&minus;</button>
+        <button id="zreset" title="Restablecer zoom">1:1</button>
+        <span id="zlabel">100%</span>
+      </div>
+      <div id="scroller"><img id="image" draggable="false" /></div>
+    </div>
   </body>
 </html>

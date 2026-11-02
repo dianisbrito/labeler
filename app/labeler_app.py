@@ -27,12 +27,12 @@ st.set_page_config(page_title="Etiquetador biocrust", layout="wide")
 _img_click = components.declare_component("biocrust_img_click", path=str(Path(__file__).parent / "img_click"))
 
 
-def clickable_image(arr, width, key):
+def clickable_image(arr, width, key, view_height=800):
     """Imagen clicable: clic / arrastre (izq.) y clic derecho o doble clic (borrar). Ver img_click/main.js."""
     buf = io.BytesIO()
     Image.fromarray(arr).save(buf, format="JPEG", quality=85)
     src = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
-    return _img_click(src=src, width=width, cursor="crosshair", key=key, default=None)
+    return _img_click(src=src, width=width, view_height=view_height, cursor="crosshair", key=key, default=None)
 
 
 @st.cache_data(show_spinner="Abriendo paquete...")
@@ -116,7 +116,8 @@ def main():
     q[1].button("Nada", on_click=set_visible, args=("none",), help="Ocultar todas las clases")
     q[2].button("Activa", on_click=set_visible, args=("active",), help="Mostrar solo la clase activa")
     visible = {c for c in classes if st.session_state.get(f"vis_{c}", True)}
-    width = st.sidebar.slider("Ancho de la imagen (px)", 500, 1600, 1000, 50)
+    width = st.sidebar.slider("Ancho de la imagen al 100% (px)", 500, 1600, 1000, 50)
+    view_h = st.sidebar.slider("Alto del visor (px)", 400, 1400, 800, 50)
     eraser = st.sidebar.checkbox("Modo borrar (clic/rectángulo quita la etiqueta)", False)
 
     cols = st.sidebar.columns(2)
@@ -133,7 +134,7 @@ def main():
         labels[name] = {}
 
     st.subheader(name)
-    st.caption("Clic = asigna · arrastrar = rectángulo · **clic derecho o doble clic = borrar** (también con arrastre). "
+    st.caption("Clic = asigna · arrastrar = rectángulo · **clic derecho o doble clic = borrar** (también con arrastre) · **Ctrl + rueda = zoom** · botón central = mover. "
                f"Clase activa: **{cur}**" + ("  (BORRAR)" if eraser else ""))
     labels.setdefault(name, {})
     t1, t2, t3 = st.columns([1, 1, 3])
@@ -144,7 +145,7 @@ def main():
         st.warning(f"La clase activa ({cur}) está oculta: lo que asignes no se verá hasta que la muestres.")
     view = core.render(img, seg, bnd, labels[name], classes, show_bnd, alpha, visible if show_col else set())
     h = int(view.shape[0] * width / view.shape[1])
-    val = clickable_image(view, width, key=f"img_{pack_key}_{stem}")
+    val = clickable_image(view, width, key=f"img_{pack_key}_{stem}", view_height=view_h)
     if val and val.get("unix_time") != st.session_state.last_t:
         st.session_state.last_t = val.get("unix_time")
         ids = core.apply_click(val, seg, cent)
