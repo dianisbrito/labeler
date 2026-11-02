@@ -1,8 +1,0 @@
-body { margin: 0; font-family: sans-serif; }
-#viewer { position: relative; }
-#scroller { overflow: auto; width: 100%; border: 1px solid #8884; box-sizing: border-box; }
-img { user-select: none; display: block; }
-#tools { position: absolute; top: 6px; left: 6px; z-index: 5; display: flex; gap: 4px; align-items: center;
-         background: #000a; padding: 3px 5px; border-radius: 6px; }
-#tools button { width: 28px; height: 24px; cursor: pointer; border: 0; border-radius: 4px; font-weight: bold; }
-#zlabel { color: #fff; font-size: 12px; min-width: 40px; text-align: center; }
